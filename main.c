@@ -96,7 +96,23 @@ int main(void)
     mem = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (!mem)
         err(1, "allocating guest memory");
-    memcpy(mem, code, sizeof(code));
+
+    FILE *f;
+    unsigned char code_buffer[50];
+    int n;
+
+    f = fopen("test.bin", "rb");
+    if (f)
+    {
+        n = fread(code_buffer, 50, 1, f);
+        fclose(f);
+    }
+    else
+    {
+        printf("error opening file");
+    }
+
+    memcpy(mem, code_buffer, sizeof(code_buffer));
 
     /* Map it to the second page frame (to avoid the real-mode IDT at 0). */
     struct kvm_userspace_memory_region region = {
