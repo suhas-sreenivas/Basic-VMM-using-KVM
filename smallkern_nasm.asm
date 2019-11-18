@@ -19,9 +19,13 @@ check_key:
     inc ecx
     cmp al, `\n`
     jne check_key
-    mov ecx, 5
+    mov ecx, 0
+console_out:
     mov al, [ebx+ecx]
     out 0x42, al        ; output contents of al to port at address held in dx
-    mov al, `\n`
-    out 0x42, al
+    inc ecx
+    cmp al, `\n`
+    jne console_out
+    ;mov al, `\n`
+    ;out 0x42, al
     hlt
