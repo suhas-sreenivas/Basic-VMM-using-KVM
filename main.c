@@ -93,32 +93,63 @@ int main(void)
         err(1, "KVM_CREATE_VM");
 
     /* Allocate one aligned page of guest memory to hold the code. */
-    mem = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    mem = mmap(NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (!mem)
         err(1, "allocating guest memory");
 
-    FILE *f;
-    unsigned char code_buffer[50];
-    int n;
+    // FILE *f;
+    // unsigned char code_buffer[50];
+    // int n;
 
-    f = fopen("test.bin", "rb");
-    if (f)
-    {
-        n = fread(code_buffer, 50, 1, f);
-        fclose(f);
-    }
-    else
-    {
-        printf("error opening file");
-    }
+    // f = fopen("smallkern", "rb");
+    // if (f)
+    // {
+    //     n = fread(code_buffer, 50, 1, f);
+    //     fclose(f);
+    // }
+    // else
+    // {
+    //     printf("error opening file");
+    // }
 
-    memcpy(mem, code_buffer, sizeof(code_buffer));
+	FILE *file;
+	char *code_buffer;
+	unsigned long fileLen;
+
+	//Open file
+	file = fopen("smallkern", "rb");
+	if (!file)
+	{
+		fprintf(stderr, "Unable to open file %s", "smallkern");
+		// return;
+	}
+	
+	//Get file length
+	fseek(file, 0, SEEK_END);
+	fileLen = ftell(file);
+	fseek(file, 0, SEEK_SET);
+
+	//Allocate memory
+	code_buffer = (char *)malloc(fileLen+1);
+	if (!code_buffer)
+	{
+		fprintf(stderr, "Memory error!");
+                                fclose(file);
+		// return;
+	}
+
+	//Read file contents into buffer
+	fread(code_buffer, fileLen, 1, file);
+	fclose(file);
+
+    memcpy(mem, code_buffer, fileLen);
 
     /* Map it to the second page frame (to avoid the real-mode IDT at 0). */
     struct kvm_userspace_memory_region region = {
         .slot = 0,
+        .flags = KVM_MEM_LOG_DIRTY_PAGES,
         .guest_phys_addr = 0x1000,
-        .memory_size = 0x1000,
+        .memory_size = 0x10000,
         .userspace_addr = (uint64_t)mem,
     };
     ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &region);
@@ -214,6 +245,14 @@ int main(void)
                 // printf("%c", *(((char *)run) + run->io.data_offset));
             }
 
+            else if(run->io.direction == KVM_EXIT_IO_OUT && run->io.size == 1 && run->io.port == 0x45 && run->io.count == 1){
+                // printf("port %x", run->io.port);
+                // printf("count %x", run->io.count);
+                // printf("size %x", run->io.size);
+                keyboard.status = *(((uint8_t *)run) + run->io.data_offset);
+                // printf("%c", *(((char *)run) + run->io.data_offset));
+            }
+
             else if(run->io.direction == KVM_EXIT_IO_IN && run->io.size == 1 && run->io.port == 0x44 && run->io.count == 1){
                 // printf("port %x", run->io.port);
                 // printf("count %x", run->io.count);
@@ -229,6 +268,19 @@ int main(void)
                  (unsigned long long)run->fail_entry.hardware_entry_failure_reason);
         case KVM_EXIT_INTERNAL_ERROR:
             errx(1, "KVM_EXIT_INTERNAL_ERROR: suberror = 0x%x", run->internal.suberror);
+        case KVM_EXIT_MMIO:
+			printf("Got an unexpected MMIO exit:"
+					   " phys_addr %#llx,"
+					   " data %02x %02x %02x %02x"
+						" %02x %02x %02x %02x,"
+					   " len %u, is_write %hhu",
+					   (unsigned long long) run->mmio.phys_addr,
+					   run->mmio.data[0], run->mmio.data[1],
+					   run->mmio.data[2], run->mmio.data[3],
+					   run->mmio.data[4], run->mmio.data[5],
+					   run->mmio.data[6], run->mmio.data[7],
+					   run->mmio.len, run->mmio.is_write);
+
         default:
             errx(1, "exit_reason = 0x%x", run->exit_reason);
         }
