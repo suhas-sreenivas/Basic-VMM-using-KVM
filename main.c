@@ -33,6 +33,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <ncurses.h>
+#include <time.h>
 
 int main(void)
 {
@@ -202,6 +203,16 @@ int main(void)
     } keyboard = { .status = false };
     char c;
 
+    struct{
+        bool fire;
+        bool enable;
+        clock_t start_time;
+        uint8_t interval;
+        uint8_t port47;
+    } timer = { .fire = false, .enable = false, .port47 = 0 };
+    int time_diff;
+
+
     /* Initialize ncurses to immediately make the charater available without waiting for user input */
     initscr();
     cbreak();
@@ -210,6 +221,15 @@ int main(void)
 
     /* Repeatedly run code and handle VM exits. */
     while (1) {
+        if(timer.enable){
+            time_diff = (clock() - timer.start_time)*1000/CLOCKS_PER_SEC;
+            // printf("%d", time_diff);
+            if(time_diff >= timer.interval){
+                timer.port47 |= 1UL << 1;
+                timer.start_time = clock();
+            }
+        }
+
         c = getch();
         if(c!=ERR){
             keyboard.key = c;
@@ -259,6 +279,27 @@ int main(void)
                 // printf("size %x", run->io.size);
                 *(((uint8_t *)run) + run->io.data_offset) = keyboard.key;
                 // printf("%c", *(((char *)run) + run->io.data_offset));
+            }
+
+            else if(run->io.direction == KVM_EXIT_IO_IN && run->io.size == 1 && run->io.port == 0x47 && run->io.count == 1){
+                *(((uint8_t *)run) + run->io.data_offset) = timer.port47;
+            }
+
+            else if(run->io.direction == KVM_EXIT_IO_OUT && run->io.size == 1 && run->io.port == 0x47 && run->io.count == 1){
+                timer.port47 = *(((uint8_t *)run) + run->io.data_offset);
+                if(!timer.enable){
+                    timer.enable = (timer.port47 & 1U);
+                    if(timer.enable) timer.start_time = clock();
+                    printf("timer enalbed:%u  ", timer.enable);
+                } else{
+                    timer.enable = (timer.port47 & 1U);
+                }
+                
+            }
+
+            else if(run->io.direction == KVM_EXIT_IO_OUT && run->io.size == 1 && run->io.port == 0x46 && run->io.count == 1){
+                timer.interval = *(((uint8_t *)run) + run->io.data_offset);
+                printf("interval %u", timer.interval);
             }
             else
                 errx(1, "unhandled KVM_EXIT_IO");
