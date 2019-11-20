@@ -22,7 +22,7 @@ check_key:
     call out_str_console
     mov al, 0x1
     out 0x47, al
-    mov al, 127
+    mov al, 127         ; set timer interval in milliseconds here
     out 0x46, al
 check_timer:
     in al, 0x45
@@ -51,7 +51,7 @@ out_str_console:
     mov ecx, 0
 loop:
     mov al, [ebx+ecx]
-    out 0x42, al        ; output contents of al to port at address held in dx
+    out 0x42, al        ; output contents of al to port
     inc ecx
     cmp al, `\n`
     jne loop

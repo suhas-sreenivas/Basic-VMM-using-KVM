@@ -35,8 +35,12 @@
 #include <ncurses.h>
 #include <time.h>
 
-int main(void)
-{
+int main(int argc, char *argv[])
+{   
+    if(argc!=2){
+        printf("Usage: sudo ./basic-vmm smallkern");
+        return EXIT_FAILURE;
+    }
     int kvm, vmfd, vcpufd, ret;
     // const uint8_t code[] = {
     //     0xba, 0xf8, 0x03, /* mov $0x3f8, %dx */
@@ -61,17 +65,17 @@ int main(void)
     //     0xf4,             /* hlt */
     // };
 
-    const uint8_t code[] = {
-        0xe4, 0x45,                   //in     al,0x45
-        0x3c, 0x00,                  //cmp    al,0x0
-        0x74, 0xfa,                // je     0 <_start>
-        0xe4, 0x44,                  // in     al,0x44
-        0xba, 0x42, 0x00,             // mov    dx,0x42
-        0xee,                     // out    dx,al
-        0xb0, 0x0a,                  // mov    al,0xa
-        0xee,                     //out    dx,al
-        0xf4,                      //hlt  
-    };
+    // const uint8_t code[] = {
+    //     0xe4, 0x45,                   //in     al,0x45
+    //     0x3c, 0x00,                  //cmp    al,0x0
+    //     0x74, 0xfa,                // je     0 <_start>
+    //     0xe4, 0x44,                  // in     al,0x44
+    //     0xba, 0x42, 0x00,             // mov    dx,0x42
+    //     0xee,                     // out    dx,al
+    //     0xb0, 0x0a,                  // mov    al,0xa
+    //     0xee,                     //out    dx,al
+    //     0xf4,                      //hlt  
+    // };
 
     uint8_t *mem;
     struct kvm_sregs sregs;
@@ -98,31 +102,16 @@ int main(void)
     if (!mem)
         err(1, "allocating guest memory");
 
-    // FILE *f;
-    // unsigned char code_buffer[50];
-    // int n;
-
-    // f = fopen("smallkern", "rb");
-    // if (f)
-    // {
-    //     n = fread(code_buffer, 50, 1, f);
-    //     fclose(f);
-    // }
-    // else
-    // {
-    //     printf("error opening file");
-    // }
-
 	FILE *file;
 	char *code_buffer;
 	unsigned long fileLen;
 
 	//Open file
-	file = fopen("smallkern", "rb");
+	file = fopen(argv[1], "rb");
 	if (!file)
 	{
-		fprintf(stderr, "Unable to open file %s", "smallkern");
-		// return;
+		fprintf(stderr, "Unable to open file %s", argv[1]);
+        return EXIT_FAILURE;
 	}
 	
 	//Get file length
@@ -135,8 +124,8 @@ int main(void)
 	if (!code_buffer)
 	{
 		fprintf(stderr, "Memory error!");
-                                fclose(file);
-		// return;
+        fclose(file);
+        return EXIT_FAILURE;
 	}
 
 	//Read file contents into buffer
@@ -194,7 +183,7 @@ int main(void)
     if (ret == -1)
         err(1, "KVM_SET_REGS");
 
-    char buffer[50];
+    char buffer[500];
     size_t current_size = 0;
 
     struct{
@@ -252,7 +241,7 @@ int main(void)
                 if (buffer[current_size-1] == '\n'){
                     buffer[current_size++] = '\0';
                     printf("%s",buffer);
-                    memset(buffer, 0, 50);
+                    memset(buffer, 0, 500);
                     current_size = 0;
                 }
             }
@@ -266,19 +255,11 @@ int main(void)
             }
 
             else if(run->io.direction == KVM_EXIT_IO_OUT && run->io.size == 1 && run->io.port == 0x45 && run->io.count == 1){
-                // printf("port %x", run->io.port);
-                // printf("count %x", run->io.count);
-                // printf("size %x", run->io.size);
                 keyboard.status = *(((uint8_t *)run) + run->io.data_offset);
-                // printf("%c", *(((char *)run) + run->io.data_offset));
             }
 
             else if(run->io.direction == KVM_EXIT_IO_IN && run->io.size == 1 && run->io.port == 0x44 && run->io.count == 1){
-                // printf("port %x", run->io.port);
-                // printf("count %x", run->io.count);
-                // printf("size %x", run->io.size);
                 *(((uint8_t *)run) + run->io.data_offset) = keyboard.key;
-                // printf("%c", *(((char *)run) + run->io.data_offset));
             }
 
             else if(run->io.direction == KVM_EXIT_IO_IN && run->io.size == 1 && run->io.port == 0x47 && run->io.count == 1){
@@ -290,7 +271,7 @@ int main(void)
                 if(!timer.enable){
                     timer.enable = (timer.port47 & 1U);
                     if(timer.enable) timer.start_time = clock();
-                    printf("timer enalbed:%u  ", timer.enable);
+                    // printf("timer enalbed:%u  ", timer.enable);
                 } else{
                     timer.enable = (timer.port47 & 1U);
                 }
@@ -299,7 +280,7 @@ int main(void)
 
             else if(run->io.direction == KVM_EXIT_IO_OUT && run->io.size == 1 && run->io.port == 0x46 && run->io.count == 1){
                 timer.interval = *(((uint8_t *)run) + run->io.data_offset);
-                printf("interval %u", timer.interval);
+                // printf("interval %u", timer.interval);
             }
             else
                 errx(1, "unhandled KVM_EXIT_IO");
